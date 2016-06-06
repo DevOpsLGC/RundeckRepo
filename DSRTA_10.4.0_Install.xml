@@ -1,0 +1,90 @@
+<joblist>
+  <job>
+    <context>
+      <options preserveOrder='true'>
+        <option name='ArtifactoryURL' value='NA' />
+        <option name='DAILYLGCURL' value='http://cmartifacts3.lgc.com:8080/artifactory/InstallerImagesLatest/' />
+        <option name='SelectDailyorURL' values='ArtifactoryURL,Daily' />
+        <option name='SelectTAGENV' values='DSISDSRTADEV,DSISDSRTALE,DSISDSRTATEST' />
+        <option name='Subcomponent1' value='dsa-rtp/DSRTA_5000_12_trunk/'>
+          <description>DecisionSpaceProduction/DSPA_Installers/</description>
+        </option>
+        <option name='Subcomponent2' value='/Windows/VM/dsrta.exe' />
+        <option name='regex' value='[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9].[0-9][0-9]' />
+        <option name='winrmPassword' secure='true' value='Landmark1' />
+      </options>
+    </context>
+    <description></description>
+    <dispatch>
+      <excludePrecedence>true</excludePrecedence>
+      <keepgoing>false</keepgoing>
+      <rankOrder>ascending</rankOrder>
+      <threadcount>1</threadcount>
+    </dispatch>
+    <executionEnabled>true</executionEnabled>
+    <id>31a737d9-c167-4f12-bf95-0c079a0f9de6</id>
+    <loglevel>INFO</loglevel>
+    <name>DSRTA 10.4.0 Install</name>
+    <nodefilters>
+      <filter>tags: ${option.SelectTAGENV}</filter>
+    </nodefilters>
+    <nodesSelectedByDefault>true</nodesSelectedByDefault>
+    <scheduleEnabled>true</scheduleEnabled>
+    <sequence keepgoing='false' strategy='node-first'>
+      <command>
+        <description>STOP if DSRTA service running</description>
+        <exec>sc query DSRTA | find '"RUNNING'" &amp;&amp; if %ERRORLEVEL%==0 (net stop DSRTA)</exec>
+      </command>
+      <command>
+        <description>Uninstall DSRTA  </description>
+        <exec>IF exist C:\Landmark\DecisionSpaceRealtimeAnalytics ( cd c:\cm\installs &amp;&amp; @echo set cast=C:\Landmark\DecisionSpaceRealtimeAnalytics\Uninstaller\Uninstall_DecisionSpaceRealtimeAnalytics.exe &gt;&gt; cmdUDSRTA.bat &amp;&amp; @echo set cast=%cast:'=% &gt;&gt; cmdUDSRTA.bat &amp;&amp; @echo %cast% &gt;&gt; cmdUDSRTA.bat &amp;&amp;  @echo exit /b 0 &gt;&gt; cmdUDSRTA.bat &amp;&amp; cmdUDSRTA.bat )</exec>
+      </command>
+      <command>
+        <description>Remove dir DecisionSpaceRealtimeAnalytics after uninstall</description>
+        <exec>IF exist C:\Landmark\DecisionSpaceRealtimeAnalytics (rmdir C:\Landmark\DecisionSpaceRealtimeAnalytics /S /Q)</exec>
+      </command>
+      <command>
+        <jobref name='Get Latest from Artifactory for different regex' nodeStep='true'>
+          <arg line='-DAILYLGCURL ${option.DAILYLGCURL} -Subcomponent1 ${option.Subcomponent1} -Subcomponent2 ${option.Subcomponent2} -regex ${option.regex} -SelectDailyorURL ${option.SelectDailyorURL} -ArtifactoryURL ${option.ArtifactoryURL}' />
+        </jobref>
+      </command>
+      <command>
+        <description>Remove DSRTA dir from the cm\install</description>
+        <exec>IF exist C:\cm\installs\DSRTA.exe (del C:\cm\installs\dsrta.exe &amp;&amp; del C:\cm\installs\cmdDSRTA.bat &amp;&amp; del C:\cm\installs\cmdUDSRTA.bat)</exec>
+      </command>
+      <command>
+        <description>SCP latest DSRTA </description>
+        <node-step-plugin type='localexec'>
+          <configuration>
+            <entry key='command' value='bash -c &apos;scp -o StrictHostKeyChecking=no /Landmark/DSIS_5000.10.4.0/dsrta.exe Administrator@${node.hostname}:/cygdrive/c/cm/installs/&apos;' />
+          </configuration>
+        </node-step-plugin>
+      </command>
+      <command>
+        <description>Remove DSRTA local </description>
+        <node-step-plugin type='localexec'>
+          <configuration>
+            <entry key='command' value='bash -c &apos;cd /Landmark/DSIS_5000.10.4.0/;rm -f DSRTA.exe&apos;' />
+          </configuration>
+        </node-step-plugin>
+      </command>
+      <command>
+        <description>Add license server variables</description>
+        <exec>setx LM_LICENSE_FILE "2013@ec2-54-173-38-151" &amp;&amp; setx LICSRV_LICENSE_FILE "2013@ec2-54-173-38-151" &amp;&amp; setx LGCX_LICENSE_FILE "2013@ec2-54-173-38-151"</exec>
+      </command>
+      <command>
+        <description>create DSRTA pro file</description>
+        <exec>cd c:\cm\installs &amp;&amp; echo USER_INSTALL_DIR=C:\\Landmark\\DecisionSpaceRealtimeAnalytics&gt; dsrta.pro&amp;&amp; echo CREATE_DESK_SHORTCUT_WIN=1 &gt;&gt; dsrta.pro&amp;&amp; echo RUN_SERVICE_WIN=1 &gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\ntlmauth.dll=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\ldap.config=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\derby.properties=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\boot.bat=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\addin.properties=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\dsrta_ver.txt=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstall-DS-RTA-Service.bat=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Stop-DS-RTA-Service.bat=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Start-DS-RTA-Service.bat=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Install-DS-RTA-Service.bat=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\wrapper.exe=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\conf\\DSRTA-license.conf=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\conf\\wrapper-linux.conf=Yes&gt;&gt;dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\conf\\wrapper.conf=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstaller\\Uninstall_DecisionSpaceRealtimeAnalytics.lax=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstaller\\resource\\iawin32.dll=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstaller\\resource\\win64_32_x64.exe=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstaller\\resource\\remove.exe=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstaller\\resource\\invoker.exe=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstaller\\removeDSRTA.bat=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstaller\\config.xml=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstaller\\AppWrapper.exe=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\Uninstaller\\iawin64_x64.dll=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\DecisionSpace.ico=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\DecisionSpace_32.gif=Yes&gt;&gt; dsrta.pro&amp;&amp; echo -fileOverwrite_C\:\\Landmark\\DecisionSpaceRealtimeAnalytics\\DecisionSpace_16.gif=Yes&gt;&gt; dsrta.pro</exec>
+      </command>
+      <command>
+        <description>Install DSRTA</description>
+        <exec>cd C:\cm\installs &amp;&amp; @echo set cast=dsrta.exe -f dsrta.pro -i Silent &gt;&gt; cmdDSRTA.bat &amp;&amp; @echo set cast=%cast:'=% &gt;&gt; cmdDSRTA.bat &amp;&amp; @echo %cast% &gt;&gt; cmdDSRTA.bat  &amp;&amp; cmdDSRTA.bat</exec>
+      </command>
+      <command>
+        <description>start DSRTA service</description>
+        <exec>sc query DSRTA | find '"STOPPED'" &amp;&amp; if %ERRORLEVEL%==0 (net start DSRTA)</exec>
+      </command>
+    </sequence>
+    <uuid>31a737d9-c167-4f12-bf95-0c079a0f9de6</uuid>
+  </job>
+</joblist>
