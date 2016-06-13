@@ -1,0 +1,191 @@
+<joblist>
+  <job>
+    <context>
+      <options preserveOrder='true'>
+        <option name='ArtifactoryURL' value='NA' />
+        <option name='DAILYLGCURL' value='http://cmartifacts3.lgc.com:8080/artifactory/LgcBuilds/daily/' />
+        <option name='ENVTAG' required='true' />
+        <option name='PluginDSDS' values='NONE,activemq,ds-bpm,ds-search,ds-transfer,dsdq,dsds-ow' />
+        <option name='SelectDailyorURL' required='true' values='ArtifactoryURL,Daily' />
+        <option name='Subcomponent1' value='DSIS_5000_10_4_0/dsdssetup/branch_DSIS_5000_10_4_0/' />
+        <option name='Subcomponent2' value='install/linux64/DSIS_10.4.0_RHL.bin' />
+        <option enforcedvalues='true' name='sshlogin' values='service-dsds' />
+        <option name='jboss_home' value='/opt/Landmark/DSIntegrationServer5000.10.4.0/ApplicationServer/bin' />
+      </options>
+    </context>
+    <description></description>
+    <dispatch>
+      <excludePrecedence>true</excludePrecedence>
+      <keepgoing>false</keepgoing>
+      <rankOrder>ascending</rankOrder>
+      <threadcount>10</threadcount>
+    </dispatch>
+    <executionEnabled>true</executionEnabled>
+    <id>4c28984e-631d-4a3d-824e-c2dccb6b4511</id>
+    <loglevel>INFO</loglevel>
+    <name>DSIS-10.4.1-Install-Linux-0.7</name>
+    <nodefilters>
+      <filter>tags: ${option.ENVTAG}</filter>
+    </nodefilters>
+    <nodesSelectedByDefault>true</nodesSelectedByDefault>
+    <scheduleEnabled>true</scheduleEnabled>
+    <sequence keepgoing='false' strategy='node-first'>
+      <command>
+        <description>Install packages needed for connector</description>
+        <exec>echo sudo yum -y install libaio openmotif22 openmotif-devel</exec>
+      </command>
+      <command>
+        <description>Uninstall DSIS if installed</description>
+        <script><![CDATA[if [ -d /opt/Landmark/DSIntegrationServer5000.10.4.0 ]; then 
+    cd /opt/Landmark/DSIntegrationServer5000.10.4.0/ApplicationServer/bin
+    ./runDSDS.sh stop
+    sleep 180
+    ps auxwww | grep standalone
+    cd /opt/Landmark/DSI*/Uninstall
+    ./Uninstall
+fi]]></script>
+        <scriptargs />
+      </command>
+      <command>
+        <jobref name='Get Latest from Artifactory' nodeStep='true'>
+          <arg line='-DAILYLGCURL ${option.DAILYLGCURL} -Subcomponent1 ${option.Subcomponent1} -Subcomponent2 ${option.Subcomponent2} -SelectDailyorURL ${option.SelectDailyorURL} -ArtifactoryURL ${option.ArtifactoryURL}' />
+        </jobref>
+      </command>
+      <command>
+        <description>Unzip DSIS link</description>
+        <node-step-plugin type='localexec'>
+          <configuration>
+            <entry key='command' value='bash -c "cd /Landmark/DSIS_5000.10.4.0;mkdir DSIS_unzip; chmod -R 777 DSIS_unzip ; tar -xvf DSIS_5000.10.4.0_LINUX.tgz -C ./DSIS_unzip; cp ./DSIS_unzip/DSIS*.bin .;chmod 777 DSIS*.bin"' />
+          </configuration>
+        </node-step-plugin>
+      </command>
+      <command>
+        <description>SCP DSDS</description>
+        <node-step-plugin type='copyfile'>
+          <configuration>
+            <entry key='destinationPath' value='/lgchome/service-dsds/' />
+            <entry key='echo' value='true' />
+            <entry key='sourcePath' value='/Landmark/DSIS_5000.10.4.0/DSIS_10.4.0_RHL.bin' />
+          </configuration>
+        </node-step-plugin>
+      </command>
+      <command>
+        <description>Remove DSIS bin</description>
+        <node-step-plugin type='localexec'>
+          <configuration>
+            <entry key='command' value='bash -c &apos;cd /Landmark/DSIS_5000.10.4.0/;rm -f DSIS_10.4.0_RHL.bin;rm -rf  DSIS_unzip&apos;' />
+          </configuration>
+        </node-step-plugin>
+      </command>
+      <command>
+        <script><![CDATA[cd /installs 
+if [ -f /installs/DSIS*.tgz ]; then  
+    tar xvf  DSIS*.tgz
+fi]]></script>
+        <scriptargs />
+      </command>
+      <command>
+        <description>Execute DSDS</description>
+        <exec>cd ~; chmod 755 DSIS*.bin; ./DSIS*.bin -i silent</exec>
+      </command>
+      <command>
+        <description>Create auto_upgrade.do</description>
+        <script><![CDATA[cd /opt/Landmark/DSIntegrationServer5000.10.4.0/plugins
+echo "#### @option.PluginDSDS@ #####"
+echo -e "@option.PluginDSDS@
+ds-data" >> auto_upgrade.do
+sleep 120
+]]></script>
+        <scriptargs />
+      </command>
+      <command>
+        <description>Create symlinks and move configs</description>
+        <script><![CDATA[cd ~
+rm -rf DSIS_10.4.0_RHL.bin
+cd @option.jboss_home@
+# sudo ./runDSDS.sh stop
+# sleep 30
+./runDSDS.sh start
+sleep 120
+./runDSDS.sh stop
+sleep 30
+#symlink for standalone
+mv  @option.jboss_home@/../standalone  /Landmark/DSIS/LEA_08/dsds/
+ln -s /Landmark/DSIS/LEA_08/dsds/standalone @option.jboss_home@/../standalone
+#symlink for data
+mv  @option.jboss_home@/../data  /Landmark/DSIS/LEA_08/dsds/
+ln -s /Landmark/DSIS/LEA_08/dsds/data @option.jboss_home@/../data
+#symlink for conf
+mv  @option.jboss_home@/../conf  /Landmark/DSIS/LEA_08/dsds/
+ln -s /Landmark/DSIS/LEA_08/dsds/conf @option.jboss_home@/../conf
+#symlink for plugins
+mv  @option.jboss_home@/../../plugins  /Landmark/DSIS/LEA_08/dsds/
+ln -s /Landmark/DSIS/LEA_08/dsds/plugins @option.jboss_home@/../../plugins
+# symlink for bin
+mkdir /Landmark/DSIS/LEA_08/dsds/bin
+mv  @option.jboss_home@/standalone.conf  /Landmark/DSIS/LEA_08/dsds/bin
+ln -s /Landmark/DSIS/LEA_08/dsds/bin/standalone.conf @option.jboss_home@/standalone.conf
+# symlink for h2
+mkdir /Landmark/DSIS/LEA_08/dsds/data/h2
+mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/unitservices/main/units.h2.db /Landmark/DSIS/LEA_08/dsds/data/h2/
+ln -s /Landmark/DSIS/LEA_08/dsds/data/h2/units.h2.db @option.jboss_home@/../modules/system/layers/base/com/lgc/unitservices/main/units.h2.db
+
+mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/cartoservices/main/carto.h2.db /Landmark/DSIS/LEA_08/dsds/data/h2/
+ln -s /Landmark/DSIS/LEA_08/dsds/data/h2/carto.h2.db @option.jboss_home@/../modules/system/layers/base/com/lgc/cartoservices/main/carto.h2.db
+# symlink for translator
+# OW
+# @@ mkdir /Landmark/DSIS/LEA_08/dsds/translator/ow
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/ow/main/ow.thrift.server.log4j.properties  /Landmark/DSIS/LEA_08/dsds/translator/ow
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/ow/ow.thrift.server.log4j.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/ow/main/ow.thrift.server.log4j.properties
+
+# @@ mkdir /Landmark/DSIS/LEA_08/dsds/translator/ow10
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/ow10/main/ow.thrift.server.log4j.properties  /Landmark/DSIS/LEA_08/dsds/translator/ow10
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/ow10/ow.thrift.server.log4j.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/ow10/main/ow.thrift.server.log4j.properties
+
+# @@ mkdir /Landmark/DSIS/LEA_08/dsds/translator/ow103
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/ow103/main/ow.thrift.server.log4j.properties   /Landmark/DSIS/LEA_08/dsds/translator/ow103
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/ow103/ow.thrift.server.log4j.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/ow103/main/ow.thrift.server.log4j.properties 
+ 
+#PETREL
+# @@ mkdir /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/Entity.thrift   /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/petrel/ow.thrift.server.log4j.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/Entity.thrift 
+
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/OW2P_LOG_TYPE.properties   /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/petrel/OW2P_LOG_TYPE.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/OW2P_LOG_TYPE.properties 
+
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/OW2P.properties   /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/petrel/OW2P.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/OW2P.properties 
+
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/OW2P_UNIT.properties   /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/petrel/OW2P_UNIT.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/OW2P_UNIT.properties 
+
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/OW2P_UNIT_TYPE.properties   /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/petrel/OW2P_UNIT_TYPE.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/OW2P_UNIT_TYPE.properties 
+
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/P2OW_LOG_TYPE.properties   /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/petrel/P2OW_LOG_TYPE.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/P2OW_LOG_TYPE.properties 
+
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/P2OW.properties   /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/petrel/P2OW.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/P2OW.properties 
+
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/P2OW_UNIT.properties /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/petrel/P2OW_UNIT.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/P2OW_UNIT.properties 
+
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/P2OW_UNIT_TYPE.properties /Landmark/DSIS/LEA_08/dsds/translator/petrel
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/petrel/P2OW_UNIT_TYPE.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/petrel/main/P2OW_UNIT_TYPE.properties 
+
+#Recall
+# @@ mkdir /Landmark/DSIS/LEA_08/dsds/translator/recall
+# @@ mv  @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/recall/main/recall-connector-config.properties   /Landmark/DSIS/LEA_08/dsds/translator/recall
+# @@ ln -s  /Landmark/DSIS/LEA_08/dsds/translator/recall/ow.thrift.server.log4j.properties @option.jboss_home@/../modules/system/layers/base/com/lgc/teiid/translator/recall/main/recall-connector-config.properties 
+
+
+
+]]></script>
+        <scriptargs />
+      </command>
+    </sequence>
+    <uuid>4c28984e-631d-4a3d-824e-c2dccb6b4511</uuid>
+  </job>
+</joblist>
